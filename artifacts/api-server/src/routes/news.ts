@@ -151,7 +151,7 @@ async function fetchRssFeed(
 ): Promise<RssArticle[]> {
   try {
     const response = await fetch(url, {
-      headers: { "User-Agent": "AI-Testing-Hub/1.0 RSS Reader" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher-Google; +http://www.google.com/feedfetcher.html)" },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
@@ -252,10 +252,6 @@ async function fetchAllNews(): Promise<RssArticle[]> {
     {
       url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXJKOPxx4O1f63nnfsoiEug",
       source: "▶ Naveen AutomationLabs",
-    },
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCH5Lo7qKaAsoN4OXAsNoBbA",
-      source: "▶ QAFox",
     },
     {
       url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCcTII5pbZYkU4fgFtb4uesg",
