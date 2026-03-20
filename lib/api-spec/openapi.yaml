@@ -1,0 +1,435 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: AI News Hub API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: news
+    description: AI news feed
+  - name: saved-posts
+    description: Saved posts management
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error or username taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/guest:
+    post:
+      operationId: guestLogin
+      tags: [auth]
+      summary: Login as guest
+      responses:
+        "200":
+          description: Guest session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Reset password for a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: User not found or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current session user
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /news:
+    get:
+      operationId: getNews
+      tags: [news]
+      summary: Get latest AI news
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of AI news articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsResponse"
+
+  /saved-posts:
+    get:
+      operationId: getSavedPosts
+      tags: [saved-posts]
+      summary: Get saved posts for logged-in user
+      responses:
+        "200":
+          description: List of saved posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPostsResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: savePost
+      tags: [saved-posts]
+      summary: Save a post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePostRequest"
+      responses:
+        "200":
+          description: Post saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPost"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /saved-posts/{id}:
+    delete:
+      operationId: removeSavedPost
+      tags: [saved-posts]
+      summary: Remove a saved post
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Post removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 30
+          pattern: "^[a-zA-Z0-9]+$"
+        password:
+          type: string
+          minLength: 8
+          pattern: "^(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}$"
+      required:
+        - username
+        - password
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    ResetPasswordRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+          pattern: "^(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}$"
+      required:
+        - username
+        - newPassword
+
+    SessionUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        isGuest:
+          type: boolean
+      required:
+        - id
+        - username
+        - isGuest
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/SessionUser"
+        token:
+          type: string
+          description: JWT for use in Authorization header
+      required:
+        - user
+        - token
+
+    NewsArticle:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        source:
+          type: string
+        publishedAt:
+          type: string
+        isRelevantToDevTesting:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - title
+        - description
+        - url
+        - source
+        - publishedAt
+        - isRelevantToDevTesting
+        - tags
+
+    NewsResponse:
+      type: object
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewsArticle"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required:
+        - articles
+        - total
+        - page
+        - limit
+
+    SavePostRequest:
+      type: object
+      properties:
+        articleUrl:
+          type: string
+        articleTitle:
+          type: string
+        articleSource:
+          type: string
+        articleDate:
+          type: string
+        articleDescription:
+          type: string
+      required:
+        - articleUrl
+        - articleTitle
+        - articleSource
+        - articleDate
+
+    SavedPost:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        articleUrl:
+          type: string
+        articleTitle:
+          type: string
+        articleSource:
+          type: string
+        articleDate:
+          type: string
+        articleDescription:
+          type: string
+        savedAt:
+          type: string
+      required:
+        - id
+        - userId
+        - articleUrl
+        - articleTitle
+        - articleSource
+        - articleDate
+        - savedAt
+
+    SavedPostsResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SavedPost"
+      required:
+        - posts

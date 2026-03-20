@@ -1,0 +1,20 @@
+packages:
+  "framer-motion": "For fluid page transitions, layout animations, and stunning micro-interactions"
+  "react-hook-form": "For robust form state management and validation"
+  "@hookform/resolvers": "To integrate Zod validation with react-hook-form"
+  "date-fns": "To parse and nicely format article publication dates"
+  "clsx": "For conditional class name joining"
+  "tailwind-merge": "To properly merge tailwind utility classes"
+
+images:
+  - path: "artifacts/web/public/images/auth-bg.png"
+    description: "A dark, premium, abstract 3D mesh background in deep indigo and electric cyan, representing artificial intelligence and data flow, with subtle glowing light leaks and a high-end polished look."
+    aspect_ratio: "16:9"
+  - path: "artifacts/web/public/images/logo-icon.png"
+    description: "A very clean, minimal, modern geometric logo icon representing AI and news, using a bright cyan/blue gradient on a transparent background, perfect for a dark mode app header."
+    aspect_ratio: "1:1"
+
+notes:
+  - The application relies on session cookies; all API calls are configured to include credentials automatically via the generated client.
+  - Using generated hooks from `@workspace/api-client-react`.
+  - Dark mode is enforced by default via CSS variables on the root.
