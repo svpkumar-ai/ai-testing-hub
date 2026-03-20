@@ -301,30 +301,45 @@ async function fetchAllNews(): Promise<RssArticle[]> {
     feeds.map((f) => fetchRssFeed(f.url, f.source))
   );
 
-  const allArticles: RssArticle[] = [];
+  const freshArticles: RssArticle[] = [];
   for (const result of results) {
     if (result.status === "fulfilled") {
-      allArticles.push(...result.value);
+      freshArticles.push(...result.value);
     }
   }
 
+  // Merge fresh articles with whatever was previously cached so older
+  // articles are never wiped — only the oldest eventually fall off.
+  const previousArticles = newsCache?.articles ?? [];
+  const merged = [...freshArticles, ...previousArticles];
+
   // Sort by date, newest first
-  allArticles.sort((a, b) => {
+  merged.sort((a, b) => {
     const dateA = new Date(a.publishedAt).getTime();
     const dateB = new Date(b.publishedAt).getTime();
     return isNaN(dateA) ? 1 : isNaN(dateB) ? -1 : dateB - dateA;
   });
 
-  // Deduplicate by URL
+  // Deduplicate by URL (fresh articles win since they appear first)
   const seen = new Set<string>();
-  const deduped = allArticles.filter((a) => {
+  const deduped = merged.filter((a) => {
     if (seen.has(a.url)) return false;
     seen.add(a.url);
     return true;
   });
 
-  newsCache = { articles: deduped, fetchedAt: Date.now() };
-  return deduped;
+  // Cap at 50 articles per source (newest kept, oldest dropped)
+  const MAX_PER_SOURCE = 50;
+  const perSourceCount = new Map<string, number>();
+  const capped = deduped.filter((a) => {
+    const count = perSourceCount.get(a.source) ?? 0;
+    if (count >= MAX_PER_SOURCE) return false;
+    perSourceCount.set(a.source, count + 1);
+    return true;
+  });
+
+  newsCache = { articles: capped, fetchedAt: Date.now() };
+  return capped;
 }
 
 router.get("/news", async (req, res) => {
