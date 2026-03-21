@@ -132,6 +132,35 @@ interface CachedData {
 let newsCache: CachedData | null = null;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+// YouTube channels defined by handle (stable) + known channel ID (cached)
+const YOUTUBE_CHANNELS = [
+  { handle: "@ExecuteAutomation",     channelId: "UCO1aucBAJgFR8odzfXOZ5uw", source: "▶ ExecuteAutomation" },
+  { handle: "@RahulShettyAcademy",    channelId: "UCgx5SDcUQWCQ_1CNneQzCRw", source: "▶ Rahul Shetty Academy" },
+  { handle: "@NaveenAutomationLabs",  channelId: "UCXJKOPxx4O1f63nnfsoiEug", source: "▶ Naveen AutomationLabs" },
+  { handle: "@MukeshOtwani",          channelId: "UCcTII5pbZYkU4fgFtb4uesg", source: "▶ Mukesh Otwani" },
+  { handle: "@Chase-H-AI",            channelId: "UCoy6cTJ7Tg0dqS-DI-_REsA", source: "▶ Chase AI" },
+  { handle: "@aiwithbrandon",         channelId: "UCEzrs7gK6Nf6t_tadEprzxQ", source: "▶ aiwithbrandon" },
+];
+
+// Blog feeds (parallel-fetched — less rate-limit sensitive)
+const BLOG_FEEDS = [
+  { url: "https://www.ministryoftesting.com/feed",            source: "Ministry of Testing" },
+  { url: "https://www.softwaretestinghelp.com/feed/",         source: "Software Testing Help" },
+  { url: "https://applitools.com/blog/feed/",                 source: "Applitools Blog" },
+  { url: "https://www.browserstack.com/blog/feed/",           source: "BrowserStack Blog" },
+  { url: "https://www.katalon.com/resources-center/blog/feed/", source: "Katalon Blog" },
+  { url: "https://www.softwaretestingmagazine.com/feed/",     source: "Testing Magazine" },
+];
+
+// In-memory cache of resolved channel IDs — survives across cache refreshes
+// but resets on server restart (that's intentional so stale IDs get re-resolved)
+const resolvedChannelIds = new Map<string, string>();
+
+const YOUTUBE_UA =
+  "Mozilla/5.0 (compatible; Feedfetcher-Google; +http://www.google.com/feedfetcher.html)";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function decodeHtmlEntities(text: string): string {
   return text
     .replace(/<[^>]*>/g, "")
@@ -145,93 +174,133 @@ function decodeHtmlEntities(text: string): string {
     .trim();
 }
 
-async function fetchRssFeed(
-  url: string,
-  sourceName: string
-): Promise<RssArticle[]> {
+function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
+  const items: RssArticle[] = [];
+
+  // Try RSS <item> format first
+  const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/gi);
+  for (const match of itemMatches) {
+    const item = match[1];
+    const titleMatch = item.match(/<title[^>]*><!\[CDATA\[(.*?)\]\]><\/title>|<title[^>]*>(.*?)<\/title>/s);
+    const linkMatch = item.match(/<link[^>]*>(.*?)<\/link>|<guid[^>]*>(https?:\/\/[^<]+)<\/guid>/s);
+    const descMatch = item.match(/<description[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>|<description[^>]*>([\s\S]*?)<\/description>/s);
+    const pubDateMatch = item.match(/<pubDate[^>]*>(.*?)<\/pubDate>/s);
+
+    const title = decodeHtmlEntities(titleMatch?.[1] ?? titleMatch?.[2] ?? "");
+    const itemUrl = (linkMatch?.[1] ?? linkMatch?.[2] ?? "").trim();
+    const description = decodeHtmlEntities(descMatch?.[1] ?? descMatch?.[2] ?? "").slice(0, 300);
+    const publishedAt = pubDateMatch?.[1]?.trim() ?? new Date().toISOString();
+
+    if (!title || !itemUrl) continue;
+    const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
+    items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), tags: extractTags(title, description) });
+    if (items.length >= 15) break;
+  }
+
+  // Fall back to Atom <entry> format (YouTube uses this)
+  if (items.length === 0) {
+    const entryMatches = xml.matchAll(/<entry[^>]*>([\s\S]*?)<\/entry>/gi);
+    for (const match of entryMatches) {
+      const entry = match[1];
+      const titleMatch = entry.match(/<title[^>]*>([\s\S]*?)<\/title>/s);
+      const linkMatch = entry.match(/<link[^>]*href="([^"]+)"/);
+      const descMatch =
+        entry.match(/<media:description[^>]*>([\s\S]*?)<\/media:description>/s) ||
+        entry.match(/<summary[^>]*>([\s\S]*?)<\/summary>/s) ||
+        entry.match(/<content[^>]*>([\s\S]*?)<\/content>/s);
+      const pubMatch =
+        entry.match(/<published[^>]*>(.*?)<\/published>/s) ||
+        entry.match(/<updated[^>]*>(.*?)<\/updated>/s);
+
+      const title = decodeHtmlEntities(titleMatch?.[1] ?? "");
+      const itemUrl = (linkMatch?.[1] ?? "").trim();
+      const description = decodeHtmlEntities(descMatch?.[1] ?? "").slice(0, 300);
+      const publishedAt = pubMatch?.[1]?.trim() ?? new Date().toISOString();
+
+      if (!title || !itemUrl) continue;
+      const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
+      items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), tags: extractTags(title, description) });
+      if (items.length >= 15) break;
+    }
+  }
+
+  return items;
+}
+
+async function fetchRssFeed(url: string, sourceName: string): Promise<RssArticle[]> {
   try {
     const response = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher-Google; +http://www.google.com/feedfetcher.html)" },
+      headers: { "User-Agent": YOUTUBE_UA },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return [];
-    const xml = await response.text();
-
-    const items: RssArticle[] = [];
-
-    // Try RSS <item> format first
-    const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/gi);
-    for (const match of itemMatches) {
-      const item = match[1];
-      const titleMatch = item.match(/<title[^>]*><!\[CDATA\[(.*?)\]\]><\/title>|<title[^>]*>(.*?)<\/title>/s);
-      const linkMatch = item.match(/<link[^>]*>(.*?)<\/link>|<guid[^>]*>(https?:\/\/[^<]+)<\/guid>/s);
-      const descMatch = item.match(/<description[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/description>|<description[^>]*>([\s\S]*?)<\/description>/s);
-      const pubDateMatch = item.match(/<pubDate[^>]*>(.*?)<\/pubDate>/s);
-
-      const title = decodeHtmlEntities(titleMatch?.[1] ?? titleMatch?.[2] ?? "");
-      const itemUrl = (linkMatch?.[1] ?? linkMatch?.[2] ?? "").trim();
-      const description = decodeHtmlEntities(descMatch?.[1] ?? descMatch?.[2] ?? "").slice(0, 300);
-      const publishedAt = pubDateMatch?.[1]?.trim() ?? new Date().toISOString();
-
-      if (!title || !itemUrl) continue;
-
-      const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
-      items.push({
-        id,
-        title,
-        description: description || "No description available.",
-        url: itemUrl,
-        source: sourceName,
-        publishedAt,
-        isRelevantToDevTesting: isAiRelated(title, description),
-        tags: extractTags(title, description),
-      });
-
-      if (items.length >= 15) break;
-    }
-
-    // If no RSS items found, try Atom <entry> format (YouTube uses this)
-    if (items.length === 0) {
-      const entryMatches = xml.matchAll(/<entry[^>]*>([\s\S]*?)<\/entry>/gi);
-      for (const match of entryMatches) {
-        const entry = match[1];
-        const titleMatch = entry.match(/<title[^>]*>([\s\S]*?)<\/title>/s);
-        const linkMatch = entry.match(/<link[^>]*href="([^"]+)"/);
-        const descMatch =
-          entry.match(/<media:description[^>]*>([\s\S]*?)<\/media:description>/s) ||
-          entry.match(/<summary[^>]*>([\s\S]*?)<\/summary>/s) ||
-          entry.match(/<content[^>]*>([\s\S]*?)<\/content>/s);
-        const pubMatch =
-          entry.match(/<published[^>]*>(.*?)<\/published>/s) ||
-          entry.match(/<updated[^>]*>(.*?)<\/updated>/s);
-
-        const title = decodeHtmlEntities(titleMatch?.[1] ?? "");
-        const itemUrl = (linkMatch?.[1] ?? "").trim();
-        const description = decodeHtmlEntities(descMatch?.[1] ?? "").slice(0, 300);
-        const publishedAt = pubMatch?.[1]?.trim() ?? new Date().toISOString();
-
-        if (!title || !itemUrl) continue;
-
-        const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
-        items.push({
-          id,
-          title,
-          description: description || "No description available.",
-          url: itemUrl,
-          source: sourceName,
-          publishedAt,
-          isRelevantToDevTesting: isAiRelated(title, description),
-          tags: extractTags(title, description),
-        });
-
-        if (items.length >= 15) break;
-      }
-    }
-
-    return items;
+    return parseXmlFeed(await response.text(), sourceName);
   } catch {
     return [];
   }
+}
+
+// Derive uploads playlist ID from channel ID (UC... → UU...)
+function uploadsPlaylistId(channelId: string): string {
+  return "UU" + channelId.slice(2);
+}
+
+// Fetch recent videos for a channel using YouTube Data API v3.
+// Uses the uploads playlist endpoint — costs only 1 quota unit per call.
+async function fetchYouTubeViaApi(
+  channel: { channelId: string; source: string },
+  apiKey: string
+): Promise<RssArticle[]> {
+  try {
+    const playlistId = uploadsPlaylistId(channel.channelId);
+    const url =
+      `https://www.googleapis.com/youtube/v3/playlistItems` +
+      `?part=snippet&playlistId=${playlistId}&maxResults=15&key=${apiKey}`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!resp.ok) return [];
+    const data = await resp.json() as { items?: Array<{ snippet: { title: string; description: string; publishedAt: string; resourceId: { videoId: string } } }> };
+    return (data.items ?? []).map((item) => {
+      const { title, description, publishedAt, resourceId } = item.snippet;
+      const videoUrl = `https://www.youtube.com/watch?v=${resourceId.videoId}`;
+      const id = Buffer.from(videoUrl).toString("base64").slice(0, 32);
+      const desc = (description ?? "").slice(0, 300) || "No description available.";
+      return {
+        id,
+        title: decodeHtmlEntities(title),
+        description: decodeHtmlEntities(desc),
+        url: videoUrl,
+        source: channel.source,
+        publishedAt,
+        isRelevantToDevTesting: isAiRelated(title, description),
+        tags: extractTags(title, description),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+// Fetch a single YouTube channel.
+// Prefers the YouTube Data API v3 (reliable, not IP-blocked) when YOUTUBE_API_KEY
+// is set. Falls back to the RSS feed otherwise.
+async function fetchYouTubeChannel(channel: { handle: string; channelId: string; source: string }): Promise<RssArticle[]> {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+
+  if (apiKey) {
+    const articles = await fetchYouTubeViaApi(channel, apiKey);
+    if (articles.length > 0) return articles;
+  }
+
+  // RSS fallback (may be intermittently blocked by YouTube on shared IPs)
+  const currentId = resolvedChannelIds.get(channel.handle) ?? channel.channelId;
+  const articles = await fetchRssFeed(
+    `https://www.youtube.com/feeds/videos.xml?channel_id=${currentId}`,
+    channel.source
+  );
+  if (articles.length > 0) {
+    resolvedChannelIds.set(channel.handle, currentId);
+  }
+  return articles;
 }
 
 async function fetchAllNews(): Promise<RssArticle[]> {
@@ -239,69 +308,22 @@ async function fetchAllNews(): Promise<RssArticle[]> {
     return newsCache.articles;
   }
 
-  const feeds = [
-    // ── YouTube: Software Testing Channels ──────────────────────────────
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCO1aucBAJgFR8odzfXOZ5uw",
-      source: "▶ ExecuteAutomation",
-    },
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCgx5SDcUQWCQ_1CNneQzCRw",
-      source: "▶ Rahul Shetty Academy",
-    },
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCXJKOPxx4O1f63nnfsoiEug",
-      source: "▶ Naveen AutomationLabs",
-    },
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCcTII5pbZYkU4fgFtb4uesg",
-      source: "▶ Mukesh Otwani",
-    },
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCoy6cTJ7Tg0dqS-DI-_REsA",
-      source: "▶ Chase AI",
-    },
-    {
-      url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCEzrs7gK6Nf6t_tadEprzxQ",
-      source: "▶ aiwithbrandon",
-    },
-
-    // ── Blogs & News ────────────────────────────────────────────────────
-    {
-      url: "https://www.ministryoftesting.com/feed",
-      source: "Ministry of Testing",
-    },
-    {
-      url: "https://www.softwaretestinghelp.com/feed/",
-      source: "Software Testing Help",
-    },
-    {
-      url: "https://applitools.com/blog/feed/",
-      source: "Applitools Blog",
-    },
-    {
-      url: "https://www.browserstack.com/blog/feed/",
-      source: "BrowserStack Blog",
-    },
-    {
-      url: "https://www.katalon.com/resources-center/blog/feed/",
-      source: "Katalon Blog",
-    },
-    {
-      url: "https://www.softwaretestingmagazine.com/feed/",
-      source: "Testing Magazine",
-    },
-  ];
-
-  const results = await Promise.allSettled(
-    feeds.map((f) => fetchRssFeed(f.url, f.source))
-  );
-
+  // Fetch YouTube channels one at a time with a 3-second gap between each.
+  // Fewer, more spaced-out requests avoids IP-level rate limiting from YouTube.
+  // The cache merge below means a failed channel keeps its previous articles.
   const freshArticles: RssArticle[] = [];
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      freshArticles.push(...result.value);
-    }
+  for (let i = 0; i < YOUTUBE_CHANNELS.length; i++) {
+    if (i > 0) await sleep(3000);
+    const articles = await fetchYouTubeChannel(YOUTUBE_CHANNELS[i]);
+    freshArticles.push(...articles);
+  }
+
+  // Fetch blogs in parallel (not rate-limited the same way)
+  const blogResults = await Promise.allSettled(
+    BLOG_FEEDS.map((f) => fetchRssFeed(f.url, f.source))
+  );
+  for (const result of blogResults) {
+    if (result.status === "fulfilled") freshArticles.push(...result.value);
   }
 
   // Merge fresh articles with whatever was previously cached so older
