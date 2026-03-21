@@ -11,6 +11,8 @@ interface RssArticle {
   source: string;
   publishedAt: string;
   isRelevantToDevTesting: boolean;
+  starred: boolean;
+  viewCount: number;
   tags: string[];
 }
 
@@ -193,7 +195,7 @@ function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
 
     if (!title || !itemUrl) continue;
     const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
-    items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), tags: extractTags(title, description) });
+    items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, tags: extractTags(title, description) });
     if (items.length >= 15) break;
   }
 
@@ -219,7 +221,7 @@ function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
 
       if (!title || !itemUrl) continue;
       const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
-      items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), tags: extractTags(title, description) });
+      items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, tags: extractTags(title, description) });
       if (items.length >= 15) break;
     }
   }
@@ -245,8 +247,37 @@ function uploadsPlaylistId(channelId: string): string {
   return "UU" + channelId.slice(2);
 }
 
+// Fetch video statistics (viewCount, likeCount) in a single batch call.
+// Costs 1 quota unit per call regardless of how many video IDs are passed.
+async function fetchVideoStats(
+  videoIds: string[],
+  apiKey: string
+): Promise<Map<string, { viewCount: number; likeCount: number }>> {
+  const statsMap = new Map<string, { viewCount: number; likeCount: number }>();
+  if (videoIds.length === 0) return statsMap;
+  try {
+    const ids = videoIds.join(",");
+    const url =
+      `https://www.googleapis.com/youtube/v3/videos` +
+      `?part=statistics&id=${ids}&key=${apiKey}`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!resp.ok) return statsMap;
+    const data = await resp.json() as {
+      items?: Array<{ id: string; statistics: { viewCount?: string; likeCount?: string } }>;
+    };
+    for (const item of data.items ?? []) {
+      statsMap.set(item.id, {
+        viewCount: parseInt(item.statistics.viewCount ?? "0", 10) || 0,
+        likeCount: parseInt(item.statistics.likeCount ?? "0", 10) || 0,
+      });
+    }
+  } catch { /* best-effort */ }
+  return statsMap;
+}
+
 // Fetch recent videos for a channel using YouTube Data API v3.
 // Uses the uploads playlist endpoint — costs only 1 quota unit per call.
+// Then fetches statistics (1 more quota unit) to find top-viewed videos.
 async function fetchYouTubeViaApi(
   channel: { channelId: string; source: string },
   apiKey: string
@@ -259,22 +290,53 @@ async function fetchYouTubeViaApi(
     const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!resp.ok) return [];
     const data = await resp.json() as { items?: Array<{ snippet: { title: string; description: string; publishedAt: string; resourceId: { videoId: string } } }> };
-    return (data.items ?? []).map((item) => {
+    const rawItems = data.items ?? [];
+
+    // Build intermediate list with video IDs attached
+    const withVideoIds = rawItems.map((item) => {
       const { title, description, publishedAt, resourceId } = item.snippet;
-      const videoUrl = `https://www.youtube.com/watch?v=${resourceId.videoId}`;
+      const videoId = resourceId.videoId;
+      const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
       const id = Buffer.from(videoUrl).toString("base64").slice(0, 32);
       const desc = (description ?? "").slice(0, 300) || "No description available.";
       return {
-        id,
-        title: decodeHtmlEntities(title),
-        description: decodeHtmlEntities(desc),
-        url: videoUrl,
-        source: channel.source,
-        publishedAt,
-        isRelevantToDevTesting: isAiRelated(title, description),
-        tags: extractTags(title, description),
+        videoId,
+        article: {
+          id,
+          title: decodeHtmlEntities(title),
+          description: decodeHtmlEntities(desc),
+          url: videoUrl,
+          source: channel.source,
+          publishedAt,
+          isRelevantToDevTesting: isAiRelated(title, description),
+          starred: false,
+          viewCount: 0,
+          tags: extractTags(title, description),
+        } as RssArticle,
       };
     });
+
+    // Fetch view counts for all videos in one API call
+    const videoIds = withVideoIds.map((v) => v.videoId).filter(Boolean);
+    const statsMap = await fetchVideoStats(videoIds, apiKey);
+
+    // Attach actual view counts
+    for (const entry of withVideoIds) {
+      const stats = statsMap.get(entry.videoId);
+      if (stats) entry.article.viewCount = stats.viewCount;
+    }
+
+    // Find the top-3 video IDs by view count
+    const sortedByViews = [...withVideoIds].sort(
+      (a, b) => b.article.viewCount - a.article.viewCount
+    );
+    const top3VideoIds = new Set(sortedByViews.slice(0, 3).map((v) => v.videoId));
+
+    // Return final articles with starred flag set
+    return withVideoIds.map((entry) => ({
+      ...entry.article,
+      starred: top3VideoIds.has(entry.videoId),
+    }));
   } catch {
     return [];
   }

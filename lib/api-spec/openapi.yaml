@@ -344,6 +344,10 @@ components:
           type: string
         isRelevantToDevTesting:
           type: boolean
+        starred:
+          type: boolean
+        viewCount:
+          type: integer
         tags:
           type: array
           items:
@@ -356,6 +360,8 @@ components:
         - source
         - publishedAt
         - isRelevantToDevTesting
+        - starred
+        - viewCount
         - tags
 
     NewsResponse:
