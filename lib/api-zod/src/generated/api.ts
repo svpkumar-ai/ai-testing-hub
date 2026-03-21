@@ -138,6 +138,8 @@ export const GetNewsResponse = zod.object({
       source: zod.string(),
       publishedAt: zod.string(),
       isRelevantToDevTesting: zod.boolean(),
+      starred: zod.boolean(),
+      viewCount: zod.number(),
       tags: zod.array(zod.string()),
     }),
   ),

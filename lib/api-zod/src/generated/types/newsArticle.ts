@@ -14,5 +14,7 @@ export interface NewsArticle {
   source: string;
   publishedAt: string;
   isRelevantToDevTesting: boolean;
+  starred: boolean;
+  viewCount: number;
   tags: string[];
 }
