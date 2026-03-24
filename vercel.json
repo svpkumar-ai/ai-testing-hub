@@ -1,0 +1,10 @@
+{
+  "buildCommand": "pnpm --filter @workspace/api-server build && pnpm --filter @workspace/web build",
+  "outputDirectory": "artifacts/web/dist/public",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
