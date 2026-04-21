@@ -348,6 +348,8 @@ components:
           type: boolean
         viewCount:
           type: integer
+        likeCount:
+          type: integer
         tags:
           type: array
           items:
@@ -362,6 +364,7 @@ components:
         - isRelevantToDevTesting
         - starred
         - viewCount
+        - likeCount
         - tags
 
     NewsResponse:

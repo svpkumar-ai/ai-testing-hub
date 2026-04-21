@@ -13,6 +13,7 @@ interface RssArticle {
   isRelevantToDevTesting: boolean;
   starred: boolean;
   viewCount: number;
+  likeCount: number;
   tags: string[];
 }
 
@@ -136,22 +137,18 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — matches the cron job schedu
 
 // YouTube channels defined by handle (stable) + known channel ID (cached)
 const YOUTUBE_CHANNELS = [
-  { handle: "@ExecuteAutomation",     channelId: "UCO1aucBAJgFR8odzfXOZ5uw", source: "▶ ExecuteAutomation" },
-  { handle: "@RahulShettyAcademy",    channelId: "UCgx5SDcUQWCQ_1CNneQzCRw", source: "▶ Rahul Shetty Academy" },
-  { handle: "@NaveenAutomationLabs",  channelId: "UCXJKOPxx4O1f63nnfsoiEug", source: "▶ Naveen AutomationLabs" },
-  { handle: "@MukeshOtwani",          channelId: "UCcTII5pbZYkU4fgFtb4uesg", source: "▶ Mukesh Otwani" },
-  { handle: "@Chase-H-AI",            channelId: "UCoy6cTJ7Tg0dqS-DI-_REsA", source: "▶ Chase AI" },
-  { handle: "@aiwithbrandon",         channelId: "UCEzrs7gK6Nf6t_tadEprzxQ", source: "▶ aiwithbrandon" },
-];
-
-// Blog feeds (parallel-fetched — less rate-limit sensitive)
-const BLOG_FEEDS = [
-  { url: "https://www.ministryoftesting.com/feed",            source: "Ministry of Testing" },
-  { url: "https://www.softwaretestinghelp.com/feed/",         source: "Software Testing Help" },
-  { url: "https://applitools.com/blog/feed/",                 source: "Applitools Blog" },
-  { url: "https://www.browserstack.com/blog/feed/",           source: "BrowserStack Blog" },
-  { url: "https://www.katalon.com/resources-center/blog/feed/", source: "Katalon Blog" },
-  { url: "https://www.softwaretestingmagazine.com/feed/",     source: "Testing Magazine" },
+  { handle: "@ExecuteAutomation",       channelId: "UCO1aucBAJgFR8odzfXOZ5uw", source: "▶ ExecuteAutomation" },
+  { handle: "@RahulShettyAcademy",      channelId: "UCgx5SDcUQWCQ_1CNneQzCRw", source: "▶ Rahul Shetty Academy" },
+  { handle: "@NaveenAutomationLabs",    channelId: "UCXJKOPxx4O1f63nnfsoiEug", source: "▶ Naveen AutomationLabs" },
+  { handle: "@MukeshOtwani",            channelId: "UCcTII5pbZYkU4fgFtb4uesg", source: "▶ Mukesh Otwani" },
+  { handle: "@Chase-H-AI",              channelId: "UCoy6cTJ7Tg0dqS-DI-_REsA", source: "▶ Chase AI" },
+  { handle: "@aiwithbrandon",           channelId: "UCEzrs7gK6Nf6t_tadEprzxQ", source: "▶ aiwithbrandon" },
+  { handle: "@SDET-QA",                 channelId: "UC46vj6mN-6kZm5RYWWqebsg", source: "▶ SDET Pavan" },
+  { handle: "@AutomationStepByStep",    channelId: "UCTt7pyY-o0eltq14glaG5dg", source: "▶ Automation Step By Step" },
+  { handle: "@TestingMinibytes",        channelId: "UC6PTXUHb6j4Oxf0ccdRI11A", source: "▶ Testing Mini Bytes" },
+  { handle: "@thetestingacademy",       channelId: "UCc8x1YwoLl-4WLo5imVrgdw", source: "▶ The Testing Academy" },
+  { handle: "@TestMuAI",               channelId: "UCCymWVaTozpEng_ep0mdUyw",  source: "▶ TestMu AI" },
+  { handle: "@SoftwareTestingMentor",   channelId: "UCzOMBStlSDfyai6rWdK3hWw", source: "▶ Software Testing Mentor" },
 ];
 
 // In-memory cache of resolved channel IDs — survives across cache refreshes
@@ -195,7 +192,7 @@ function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
 
     if (!title || !itemUrl) continue;
     const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
-    items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, tags: extractTags(title, description) });
+    items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, likeCount: 0, tags: extractTags(title, description) });
     if (items.length >= 15) break;
   }
 
@@ -221,7 +218,7 @@ function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
 
       if (!title || !itemUrl) continue;
       const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
-      items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, tags: extractTags(title, description) });
+      items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, likeCount: 0, tags: extractTags(title, description) });
       if (items.length >= 15) break;
     }
   }
@@ -311,32 +308,26 @@ async function fetchYouTubeViaApi(
           isRelevantToDevTesting: isAiRelated(title, description),
           starred: false,
           viewCount: 0,
+          likeCount: 0,
           tags: extractTags(title, description),
         } as RssArticle,
       };
     });
 
-    // Fetch view counts for all videos in one API call
+    // Fetch view + like counts for all videos in one API call
     const videoIds = withVideoIds.map((v) => v.videoId).filter(Boolean);
     const statsMap = await fetchVideoStats(videoIds, apiKey);
 
-    // Attach actual view counts
+    // Attach actual view and like counts — starring is applied globally in fetchAllNews
     for (const entry of withVideoIds) {
       const stats = statsMap.get(entry.videoId);
-      if (stats) entry.article.viewCount = stats.viewCount;
+      if (stats) {
+        entry.article.viewCount = stats.viewCount;
+        entry.article.likeCount = stats.likeCount;
+      }
     }
 
-    // Find the top-3 video IDs by view count
-    const sortedByViews = [...withVideoIds].sort(
-      (a, b) => b.article.viewCount - a.article.viewCount
-    );
-    const top3VideoIds = new Set(sortedByViews.slice(0, 3).map((v) => v.videoId));
-
-    // Return final articles with starred flag set
-    return withVideoIds.map((entry) => ({
-      ...entry.article,
-      starred: top3VideoIds.has(entry.videoId),
-    }));
+    return withVideoIds.map((entry) => entry.article);
   } catch {
     return [];
   }
@@ -380,18 +371,12 @@ async function fetchAllNews(force = false): Promise<RssArticle[]> {
     freshArticles.push(...articles);
   }
 
-  // Fetch blogs in parallel (not rate-limited the same way)
-  const blogResults = await Promise.allSettled(
-    BLOG_FEEDS.map((f) => fetchRssFeed(f.url, f.source))
-  );
-  for (const result of blogResults) {
-    if (result.status === "fulfilled") freshArticles.push(...result.value);
-  }
+  // Keep only AI/automation-relevant content
+  const aiFiltered = freshArticles.filter((a) => a.isRelevantToDevTesting);
 
-  // Merge fresh articles with whatever was previously cached so older
-  // articles are never wiped — only the oldest eventually fall off.
+  // Merge with previous cache (keeps articles from channels that failed this cycle)
   const previousArticles = newsCache?.articles ?? [];
-  const merged = [...freshArticles, ...previousArticles];
+  const merged = [...aiFiltered, ...previousArticles];
 
   // Sort by date, newest first
   merged.sort((a, b) => {
@@ -418,8 +403,17 @@ async function fetchAllNews(force = false): Promise<RssArticle[]> {
     return true;
   });
 
-  newsCache = { articles: capped, fetchedAt: Date.now() };
-  return capped;
+  // Global starring: mark top-15 articles by combined engagement (views + likes×100)
+  // across ALL channels so the most popular content surfaces regardless of source.
+  const TOP_STARRED = 15;
+  const byEngagement = [...capped].sort(
+    (a, b) => (b.viewCount + b.likeCount * 100) - (a.viewCount + a.likeCount * 100)
+  );
+  const starredIds = new Set(byEngagement.slice(0, TOP_STARRED).map((a) => a.id));
+  const final = capped.map((a) => ({ ...a, starred: starredIds.has(a.id) }));
+
+  newsCache = { articles: final, fetchedAt: Date.now() };
+  return final;
 }
 
 router.get("/news", async (req, res) => {

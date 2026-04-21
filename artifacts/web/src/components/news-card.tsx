@@ -6,7 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import { Card, Button, cn } from "./ui-elements";
 import { format, isValid } from "date-fns";
-import { ExternalLink, BookmarkPlus, Check, Sparkles, Star, Eye } from "lucide-react";
+import { ExternalLink, BookmarkPlus, Check, Sparkles, Star, Eye, ThumbsUp } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -123,9 +123,17 @@ export function NewsCard({ article, index }: NewsCardProps) {
                 Read Full Article <ExternalLink className="ml-1 h-4 w-4" />
               </a>
               {article.starred && article.viewCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs text-yellow-400/80">
-                  <Eye className="h-3 w-3" />
-                  {article.viewCount.toLocaleString()} views
+                <span className="inline-flex items-center gap-2 text-xs text-yellow-400/80">
+                  <span className="inline-flex items-center gap-1">
+                    <Eye className="h-3 w-3" />
+                    {article.viewCount.toLocaleString()}
+                  </span>
+                  {article.likeCount > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <ThumbsUp className="h-3 w-3" />
+                      {article.likeCount.toLocaleString()}
+                    </span>
+                  )}
                 </span>
               )}
             </div>

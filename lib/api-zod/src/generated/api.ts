@@ -140,6 +140,7 @@ export const GetNewsResponse = zod.object({
       isRelevantToDevTesting: zod.boolean(),
       starred: zod.boolean(),
       viewCount: zod.number(),
+      likeCount: zod.number(),
       tags: zod.array(zod.string()),
     }),
   ),
