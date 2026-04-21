@@ -151,6 +151,15 @@ const YOUTUBE_CHANNELS = [
   { handle: "@SoftwareTestingMentor",   channelId: "UCzOMBStlSDfyai6rWdK3hWw", source: "▶ Software Testing Mentor" },
 ];
 
+// Blog feeds used as fallback when YOUTUBE_API_KEY is absent and YouTube RSS is blocked.
+// These reliably serve AI/testing content from Vercel's shared IPs.
+const FALLBACK_BLOG_FEEDS = [
+  { url: "https://applitools.com/blog/feed/",             source: "Applitools Blog" },
+  { url: "https://www.browserstack.com/blog/rss/",        source: "BrowserStack Blog" },
+  { url: "https://www.softwaretestinghelp.com/feed/",     source: "Software Testing Help" },
+  { url: "https://katalon.com/resources-center/blog/rss.xml", source: "Katalon Blog" },
+];
+
 // In-memory cache of resolved channel IDs — survives across cache refreshes
 // but resets on server restart (that's intentional so stale IDs get re-resolved)
 const resolvedChannelIds = new Map<string, string>();
@@ -369,6 +378,17 @@ async function fetchAllNews(force = false): Promise<RssArticle[]> {
     if (i > 0) await sleep(3000);
     const articles = await fetchYouTubeChannel(YOUTUBE_CHANNELS[i]);
     freshArticles.push(...articles);
+  }
+
+  // When YouTube yields nothing (no API key + RSS blocked on shared IPs),
+  // fall back to curated blog feeds so the page is never empty.
+  if (freshArticles.length === 0) {
+    const blogResults = await Promise.allSettled(
+      FALLBACK_BLOG_FEEDS.map((f) => fetchRssFeed(f.url, f.source))
+    );
+    for (const r of blogResults) {
+      if (r.status === "fulfilled") freshArticles.push(...r.value);
+    }
   }
 
   // Keep only AI/automation-relevant content
