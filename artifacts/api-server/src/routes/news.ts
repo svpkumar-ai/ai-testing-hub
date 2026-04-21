@@ -132,7 +132,7 @@ interface CachedData {
 }
 
 let newsCache: CachedData | null = null;
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — matches the cron job schedule
 
 // YouTube channels defined by handle (stable) + known channel ID (cached)
 const YOUTUBE_CHANNELS = [
@@ -365,8 +365,8 @@ async function fetchYouTubeChannel(channel: { handle: string; channelId: string;
   return articles;
 }
 
-async function fetchAllNews(): Promise<RssArticle[]> {
-  if (newsCache && Date.now() - newsCache.fetchedAt < CACHE_TTL_MS) {
+async function fetchAllNews(force = false): Promise<RssArticle[]> {
+  if (!force && newsCache && Date.now() - newsCache.fetchedAt < CACHE_TTL_MS) {
     return newsCache.articles;
   }
 
@@ -426,8 +426,9 @@ router.get("/news", async (req, res) => {
   const parsed = GetNewsQueryParams.safeParse(req.query);
   const page = parsed.success ? (parsed.data.page ?? 1) : 1;
   const limit = parsed.success ? (parsed.data.limit ?? 20) : 20;
+  const force = req.query.force === "true";
 
-  const articles = await fetchAllNews();
+  const articles = await fetchAllNews(force);
   const total = articles.length;
   const start = (page - 1) * limit;
   const paged = articles.slice(start, start + limit);

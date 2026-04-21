@@ -1,4 +1,5 @@
 import { useGetNews, getGetNewsQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Navbar } from "@/components/navbar";
 import { NewsCard } from "@/components/news-card";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -6,15 +7,24 @@ import { Button } from "@/components/ui-elements";
 import { motion } from "framer-motion";
 
 export default function HomePage() {
+  const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch, isRefetching } = useGetNews(
     { page: 1, limit: 50 },
     {
       query: {
         queryKey: getGetNewsQueryKey({ page: 1, limit: 50 }),
-        staleTime: 1000 * 60 * 5,
+        staleTime: 1000 * 60 * 1,
       },
     }
   );
+
+  async function handleForceRefresh() {
+    // Bust the backend in-memory cache first, then re-fetch via React Query
+    await fetch("/api/news?force=true");
+    await queryClient.invalidateQueries({
+      queryKey: getGetNewsQueryKey({ page: 1, limit: 50 }),
+    });
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -38,7 +48,7 @@ export default function HomePage() {
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <Button
               variant="outline"
-              onClick={() => refetch()}
+              onClick={handleForceRefresh}
               disabled={isRefetching || isLoading}
               className="bg-card/50 backdrop-blur-sm"
             >
