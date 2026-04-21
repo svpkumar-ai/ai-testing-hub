@@ -200,7 +200,7 @@ function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
     const publishedAt = pubDateMatch?.[1]?.trim() ?? new Date().toISOString();
 
     if (!title || !itemUrl) continue;
-    const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
+    const id = Buffer.from(itemUrl).toString("base64url");
     items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, likeCount: 0, tags: extractTags(title, description) });
     if (items.length >= 15) break;
   }
@@ -226,7 +226,7 @@ function parseXmlFeed(xml: string, sourceName: string): RssArticle[] {
       const publishedAt = pubMatch?.[1]?.trim() ?? new Date().toISOString();
 
       if (!title || !itemUrl) continue;
-      const id = Buffer.from(itemUrl).toString("base64").slice(0, 32);
+      const id = Buffer.from(itemUrl).toString("base64url");
       items.push({ id, title, description: description || "No description available.", url: itemUrl, source: sourceName, publishedAt, isRelevantToDevTesting: isAiRelated(title, description), starred: false, viewCount: 0, likeCount: 0, tags: extractTags(title, description) });
       if (items.length >= 15) break;
     }
@@ -267,7 +267,11 @@ async function fetchVideoStats(
       `https://www.googleapis.com/youtube/v3/videos` +
       `?part=statistics&id=${ids}&key=${apiKey}`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!resp.ok) return statsMap;
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`[fetchVideoStats] HTTP ${resp.status}: ${body.slice(0, 200)}`);
+      return statsMap;
+    }
     const data = await resp.json() as {
       items?: Array<{ id: string; statistics: { viewCount?: string; likeCount?: string } }>;
     };
@@ -277,7 +281,7 @@ async function fetchVideoStats(
         likeCount: parseInt(item.statistics.likeCount ?? "0", 10) || 0,
       });
     }
-  } catch { /* best-effort */ }
+  } catch (e) { console.error("[fetchVideoStats] error:", e); }
   return statsMap;
 }
 
@@ -303,7 +307,7 @@ async function fetchYouTubeViaApi(
       const { title, description, publishedAt, resourceId } = item.snippet;
       const videoId = resourceId.videoId;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      const id = Buffer.from(videoUrl).toString("base64").slice(0, 32);
+      const id = videoId; // YouTube video IDs are already unique — base64(url).slice(32) collides
       const desc = (description ?? "").slice(0, 300) || "No description available.";
       return {
         videoId,
