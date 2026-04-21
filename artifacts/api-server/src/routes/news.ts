@@ -299,7 +299,8 @@ async function fetchYouTubeViaApi(
       `?part=snippet&playlistId=${playlistId}&maxResults=15&key=${apiKey}`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!resp.ok) {
-      console.error(`[fetchYouTubeViaApi] ${channel.source} HTTP ${resp.status}`);
+      const body = await resp.text().catch(() => "");
+      console.error(`[fetchYouTubeViaApi] ${channel.source} HTTP ${resp.status}: ${body.slice(0, 400)}`);
       return [];
     }
     const data = await resp.json() as { items?: Array<{ snippet: { title: string; description: string; publishedAt: string; resourceId: { videoId: string } } }> };
@@ -436,6 +437,37 @@ async function fetchAllNews(force = false): Promise<RssArticle[]> {
   newsCache = { articles: final, fetchedAt: Date.now() };
   return final;
 }
+
+// Temporary debug endpoint — tests one channel and one stats call to surface API errors
+router.get("/news/debug", async (_req, res) => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) { res.json({ error: "YOUTUBE_API_KEY not set" }); return; }
+
+  const ch = YOUTUBE_CHANNELS[0];
+  const playlistId = uploadsPlaylistId(ch.channelId);
+  const playlistUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=3&key=${apiKey}`;
+  const playlistResp = await fetch(playlistUrl, { signal: AbortSignal.timeout(10000) });
+  const playlistBody = await playlistResp.text();
+
+  let statsBody = "not attempted";
+  const playlistData = JSON.parse(playlistBody) as { items?: Array<{ snippet: { resourceId: { videoId: string } } }> };
+  const videoId = playlistData.items?.[0]?.snippet?.resourceId?.videoId;
+  if (videoId) {
+    const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoId}&key=${apiKey}`;
+    const statsResp = await fetch(statsUrl, { signal: AbortSignal.timeout(10000) });
+    statsBody = await statsResp.text();
+  }
+
+  res.json({
+    channel: ch.source,
+    apiKeyPresent: true,
+    apiKeyPrefix: apiKey.slice(0, 6) + "...",
+    playlistStatus: playlistResp.status,
+    playlistBody: JSON.parse(playlistBody),
+    videoId,
+    statsBody: statsBody === "not attempted" ? statsBody : JSON.parse(statsBody),
+  });
+});
 
 router.get("/news", async (req, res) => {
   const parsed = GetNewsQueryParams.safeParse(req.query);
