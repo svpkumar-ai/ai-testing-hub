@@ -286,8 +286,8 @@ async function fetchVideoStats(
 }
 
 // Fetch recent videos for a channel using YouTube Data API v3.
-// Uses the uploads playlist endpoint — costs only 1 quota unit per call.
-// Then fetches statistics (1 more quota unit) to find top-viewed videos.
+// Returns articles with viewCount=0/likeCount=0 — stats are applied in
+// a single batched call in fetchAllNews after all channels are collected.
 async function fetchYouTubeViaApi(
   channel: { channelId: string; source: string },
   apiKey: string
@@ -298,90 +298,87 @@ async function fetchYouTubeViaApi(
       `https://www.googleapis.com/youtube/v3/playlistItems` +
       `?part=snippet&playlistId=${playlistId}&maxResults=15&key=${apiKey}`;
     const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      console.error(`[fetchYouTubeViaApi] ${channel.source} HTTP ${resp.status}`);
+      return [];
+    }
     const data = await resp.json() as { items?: Array<{ snippet: { title: string; description: string; publishedAt: string; resourceId: { videoId: string } } }> };
     const rawItems = data.items ?? [];
 
-    // Build intermediate list with video IDs attached
-    const withVideoIds = rawItems.map((item) => {
+    return rawItems.map((item) => {
       const { title, description, publishedAt, resourceId } = item.snippet;
       const videoId = resourceId.videoId;
       const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      const id = videoId; // YouTube video IDs are already unique — base64(url).slice(32) collides
       const desc = (description ?? "").slice(0, 300) || "No description available.";
       return {
-        videoId,
-        article: {
-          id,
-          title: decodeHtmlEntities(title),
-          description: decodeHtmlEntities(desc),
-          url: videoUrl,
-          source: channel.source,
-          publishedAt,
-          isRelevantToDevTesting: isAiRelated(title, description),
-          starred: false,
-          viewCount: 0,
-          likeCount: 0,
-          tags: extractTags(title, description),
-        } as RssArticle,
-      };
+        id: videoId,
+        title: decodeHtmlEntities(title),
+        description: decodeHtmlEntities(desc),
+        url: videoUrl,
+        source: channel.source,
+        publishedAt,
+        isRelevantToDevTesting: isAiRelated(title, description),
+        starred: false,
+        viewCount: 0,
+        likeCount: 0,
+        tags: extractTags(title, description),
+      } as RssArticle;
     });
-
-    // Fetch view + like counts for all videos in one API call
-    const videoIds = withVideoIds.map((v) => v.videoId).filter(Boolean);
-    const statsMap = await fetchVideoStats(videoIds, apiKey);
-
-    // Attach actual view and like counts — starring is applied globally in fetchAllNews
-    for (const entry of withVideoIds) {
-      const stats = statsMap.get(entry.videoId);
-      if (stats) {
-        entry.article.viewCount = stats.viewCount;
-        entry.article.likeCount = stats.likeCount;
-      }
-    }
-
-    return withVideoIds.map((entry) => entry.article);
-  } catch {
+  } catch (e) {
+    console.error(`[fetchYouTubeViaApi] ${channel.source} error:`, e);
     return [];
   }
 }
 
-// Fetch a single YouTube channel.
-// Prefers the YouTube Data API v3 (reliable, not IP-blocked) when YOUTUBE_API_KEY
-// is set. Falls back to the RSS feed otherwise.
-async function fetchYouTubeChannel(channel: { handle: string; channelId: string; source: string }): Promise<RssArticle[]> {
-  const apiKey = process.env.YOUTUBE_API_KEY;
-
-  if (apiKey) {
-    const articles = await fetchYouTubeViaApi(channel, apiKey);
-    if (articles.length > 0) return articles;
-  }
-
-  // RSS fallback (may be intermittently blocked by YouTube on shared IPs)
-  const currentId = resolvedChannelIds.get(channel.handle) ?? channel.channelId;
-  const articles = await fetchRssFeed(
-    `https://www.youtube.com/feeds/videos.xml?channel_id=${currentId}`,
-    channel.source
-  );
-  if (articles.length > 0) {
-    resolvedChannelIds.set(channel.handle, currentId);
-  }
-  return articles;
-}
 
 async function fetchAllNews(force = false): Promise<RssArticle[]> {
   if (!force && newsCache && Date.now() - newsCache.fetchedAt < CACHE_TTL_MS) {
     return newsCache.articles;
   }
 
-  // Fetch YouTube channels one at a time with a 3-second gap between each.
-  // Fewer, more spaced-out requests avoids IP-level rate limiting from YouTube.
-  // The cache merge below means a failed channel keeps its previous articles.
+  const apiKey = process.env.YOUTUBE_API_KEY;
+
+  // Fetch all channel playlists in parallel when using the API (no rate-limit risk).
+  // Fall back to sequential with gaps for RSS (IP-level rate limiting).
   const freshArticles: RssArticle[] = [];
-  for (let i = 0; i < YOUTUBE_CHANNELS.length; i++) {
-    if (i > 0) await sleep(3000);
-    const articles = await fetchYouTubeChannel(YOUTUBE_CHANNELS[i]);
-    freshArticles.push(...articles);
+  if (apiKey) {
+    const results = await Promise.allSettled(
+      YOUTUBE_CHANNELS.map((ch) => fetchYouTubeViaApi(ch, apiKey))
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled") freshArticles.push(...r.value);
+    }
+
+    // One batched stats call for all video IDs across all channels.
+    // YouTube allows up to 50 IDs per request; split into chunks if needed.
+    const allVideoIds = freshArticles.map((a) => a.id).filter(Boolean);
+    const CHUNK = 50;
+    const statsMap = new Map<string, { viewCount: number; likeCount: number }>();
+    for (let i = 0; i < allVideoIds.length; i += CHUNK) {
+      const chunk = allVideoIds.slice(i, i + CHUNK);
+      const partial = await fetchVideoStats(chunk, apiKey);
+      for (const [k, v] of partial) statsMap.set(k, v);
+    }
+    for (const article of freshArticles) {
+      const stats = statsMap.get(article.id);
+      if (stats) {
+        article.viewCount = stats.viewCount;
+        article.likeCount = stats.likeCount;
+      }
+    }
+  } else {
+    // No API key — fetch via RSS sequentially with gaps to avoid IP rate limits
+    for (let i = 0; i < YOUTUBE_CHANNELS.length; i++) {
+      if (i > 0) await sleep(3000);
+      const ch = YOUTUBE_CHANNELS[i];
+      const currentId = resolvedChannelIds.get(ch.handle) ?? ch.channelId;
+      const articles = await fetchRssFeed(
+        `https://www.youtube.com/feeds/videos.xml?channel_id=${currentId}`,
+        ch.source
+      );
+      if (articles.length > 0) resolvedChannelIds.set(ch.handle, currentId);
+      freshArticles.push(...articles);
+    }
   }
 
   // When YouTube yields nothing (no API key + RSS blocked on shared IPs),
