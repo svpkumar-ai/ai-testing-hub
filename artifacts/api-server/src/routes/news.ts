@@ -137,6 +137,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — matches the cron job schedu
 
 // YouTube channels defined by handle (stable) + known channel ID (cached)
 const YOUTUBE_CHANNELS = [
+  // ── Software Testing channels ──────────────────────────────────────────────
   { handle: "@ExecuteAutomation",       channelId: "UCO1aucBAJgFR8odzfXOZ5uw", source: "▶ ExecuteAutomation" },
   { handle: "@RahulShettyAcademy",      channelId: "UCgx5SDcUQWCQ_1CNneQzCRw", source: "▶ Rahul Shetty Academy" },
   { handle: "@NaveenAutomationLabs",    channelId: "UCXJKOPxx4O1f63nnfsoiEug", source: "▶ Naveen AutomationLabs" },
@@ -147,8 +148,17 @@ const YOUTUBE_CHANNELS = [
   { handle: "@AutomationStepByStep",    channelId: "UCTt7pyY-o0eltq14glaG5dg", source: "▶ Automation Step By Step" },
   { handle: "@TestingMinibytes",        channelId: "UC6PTXUHb6j4Oxf0ccdRI11A", source: "▶ Testing Mini Bytes" },
   { handle: "@thetestingacademy",       channelId: "UCc8x1YwoLl-4WLo5imVrgdw", source: "▶ The Testing Academy" },
-  { handle: "@TestMuAI",               channelId: "UCCymWVaTozpEng_ep0mdUyw",  source: "▶ TestMu AI" },
+  { handle: "@TestMuAI",                channelId: "UCCymWVaTozpEng_ep0mdUyw",  source: "▶ TestMu AI" },
   { handle: "@SoftwareTestingMentor",   channelId: "UCzOMBStlSDfyai6rWdK3hWw", source: "▶ Software Testing Mentor" },
+  // ── AI / Developer channels ────────────────────────────────────────────────
+  { handle: "@mreflow",                 channelId: "UChpleBmo18P08aKCIgti38g", source: "▶ Matt Wolfe" },
+  { handle: "@Fireship",                channelId: "UCsBjURrPoezykLs9EqgamOA", source: "▶ Fireship" },
+  { handle: "@matthew_berman",          channelId: "UCawZsQWqfGSbCI5yjkdVkTA", source: "▶ Matthew Berman" },
+  { handle: "@AIJasonZ",                channelId: "UCrXSVX9a1mj8l0CMLwKgMVw", source: "▶ AI Jason" },
+  { handle: "@samwitteveenai",          channelId: "UC55ODQSvARtgSyc8ThfiepQ", source: "▶ Sam Witteveen AI" },
+  { handle: "@aiadvantage",             channelId: "UCHhYXsLBEVVnbvsq57n1MTQ", source: "▶ The AI Advantage" },
+  { handle: "@LiamOttley",              channelId: "UCui4jxDaMb53Gdh-AZUTPAg", source: "▶ Liam Ottley" },
+  { handle: "@daveebbelaar",            channelId: "UCn8ujwUInbJkBhffxqAPBVQ", source: "▶ Dave Ebbelaar" },
 ];
 
 // Blog feeds used as fallback when YOUTUBE_API_KEY is absent and YouTube RSS is blocked.
