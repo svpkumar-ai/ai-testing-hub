@@ -150,6 +150,38 @@ export const GetNewsResponse = zod.object({
 });
 
 /**
+ * @summary Get latest QA blog articles
+ */
+export const getBlogsQueryPageDefault = 1;
+export const getBlogsQueryLimitDefault = 20;
+
+export const GetBlogsQueryParams = zod.object({
+  page: zod.coerce.number().default(getBlogsQueryPageDefault),
+  limit: zod.coerce.number().default(getBlogsQueryLimitDefault),
+});
+
+export const GetBlogsResponse = zod.object({
+  articles: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      description: zod.string(),
+      url: zod.string(),
+      source: zod.string(),
+      publishedAt: zod.string(),
+      isRelevantToDevTesting: zod.boolean(),
+      starred: zod.boolean(),
+      viewCount: zod.number(),
+      likeCount: zod.number(),
+      tags: zod.array(zod.string()),
+    }),
+  ),
+  total: zod.number(),
+  page: zod.number(),
+  limit: zod.number(),
+});
+
+/**
  * @summary Get saved posts for logged-in user
  */
 export const GetSavedPostsResponse = zod.object({

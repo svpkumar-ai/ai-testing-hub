@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "./ui-elements";
-import { BookmarkIcon, LogOut, TerminalSquare } from "lucide-react";
+import { LogOut, TerminalSquare } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Navbar() {
@@ -26,15 +26,21 @@ export function Navbar() {
           </Link>
           
           <nav className="hidden md:flex items-center gap-1">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${location === '/' ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
             >
-              Feed
+              YouTube
+            </Link>
+            <Link
+              href="/blogs"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${location === '/blogs' ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
+            >
+              Blogs
             </Link>
             {!user.isGuest && (
-              <Link 
-                href="/saved-posts" 
+              <Link
+                href="/saved-posts"
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${location === '/saved-posts' ? 'bg-white/10 text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-white/5'}`}
               >
                 Saved Posts

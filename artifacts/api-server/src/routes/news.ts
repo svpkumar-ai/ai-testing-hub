@@ -151,9 +151,9 @@ const YOUTUBE_CHANNELS = [
   { handle: "@SoftwareTestingMentor",   channelId: "UCzOMBStlSDfyai6rWdK3hWw", source: "▶ Software Testing Mentor" },
 ];
 
-// Blog feeds used as fallback when YOUTUBE_API_KEY is absent and YouTube RSS is blocked.
-// These reliably serve AI/testing content from Vercel's shared IPs.
-const FALLBACK_BLOG_FEEDS = [
+// Curated QA/testing blog RSS feeds — always fetched for the /blogs endpoint
+// and used as fallback for /news when YouTube yields nothing.
+const BLOG_FEEDS = [
   { url: "https://applitools.com/blog/feed/",             source: "Applitools Blog" },
   { url: "https://www.browserstack.com/blog/rss/",        source: "BrowserStack Blog" },
   { url: "https://www.softwaretestinghelp.com/feed/",     source: "Software Testing Help" },
@@ -386,7 +386,7 @@ async function fetchAllNews(force = false): Promise<RssArticle[]> {
   // fall back to curated blog feeds so the page is never empty.
   if (freshArticles.length === 0) {
     const blogResults = await Promise.allSettled(
-      FALLBACK_BLOG_FEEDS.map((f) => fetchRssFeed(f.url, f.source))
+      BLOG_FEEDS.map((f) => fetchRssFeed(f.url, f.source))
     );
     for (const r of blogResults) {
       if (r.status === "fulfilled") freshArticles.push(...r.value);
@@ -437,6 +437,52 @@ async function fetchAllNews(force = false): Promise<RssArticle[]> {
   newsCache = { articles: final, fetchedAt: Date.now() };
   return final;
 }
+
+let blogsCache: CachedData | null = null;
+
+async function fetchAllBlogs(force = false): Promise<RssArticle[]> {
+  if (!force && blogsCache && Date.now() - blogsCache.fetchedAt < CACHE_TTL_MS) {
+    return blogsCache.articles;
+  }
+
+  const results = await Promise.allSettled(
+    BLOG_FEEDS.map((f) => fetchRssFeed(f.url, f.source))
+  );
+  const articles: RssArticle[] = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") articles.push(...r.value);
+  }
+
+  articles.sort((a, b) => {
+    const dateA = new Date(a.publishedAt).getTime();
+    const dateB = new Date(b.publishedAt).getTime();
+    return isNaN(dateA) ? 1 : isNaN(dateB) ? -1 : dateB - dateA;
+  });
+
+  const seen = new Set<string>();
+  const deduped = articles.filter((a) => {
+    if (seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
+
+  blogsCache = { articles: deduped, fetchedAt: Date.now() };
+  return deduped;
+}
+
+router.get("/blogs", async (req, res) => {
+  const parsed = GetNewsQueryParams.safeParse(req.query);
+  const page = parsed.success ? (parsed.data.page ?? 1) : 1;
+  const limit = parsed.success ? (parsed.data.limit ?? 20) : 20;
+  const force = req.query.force === "true";
+
+  const articles = await fetchAllBlogs(force);
+  const total = articles.length;
+  const start = (page - 1) * limit;
+  const paged = articles.slice(start, start + limit);
+
+  res.json({ articles: paged, total, page, limit });
+});
 
 // Temporary debug endpoint — tests one channel and one stats call to surface API errors
 router.get("/news/debug", async (_req, res) => {

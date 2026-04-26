@@ -8,6 +8,7 @@
 
 export * from "./authResponse";
 export * from "./errorResponse";
+export * from "./getBlogsParams";
 export * from "./getNewsParams";
 export * from "./healthStatus";
 export * from "./loginRequest";

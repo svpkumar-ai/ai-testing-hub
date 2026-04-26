@@ -19,6 +19,7 @@ import type {
 import type {
   AuthResponse,
   ErrorResponse,
+  GetBlogsParams,
   GetNewsParams,
   HealthStatus,
   LoginRequest,
@@ -677,6 +678,100 @@ export function useGetNews<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetNewsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get latest QA blog articles
+ */
+export const getGetBlogsUrl = (params?: GetBlogsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/blogs?${stringifiedParams}`
+    : `/api/blogs`;
+};
+
+export const getBlogs = async (
+  params?: GetBlogsParams,
+  options?: RequestInit,
+): Promise<NewsResponse> => {
+  return customFetch<NewsResponse>(getGetBlogsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBlogsQueryKey = (params?: GetBlogsParams) => {
+  return [`/api/blogs`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetBlogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBlogs>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBlogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBlogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBlogsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBlogs>>> = ({
+    signal,
+  }) => getBlogs(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBlogs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBlogsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBlogs>>
+>;
+export type GetBlogsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get latest QA blog articles
+ */
+
+export function useGetBlogs<
+  TData = Awaited<ReturnType<typeof getBlogs>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBlogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBlogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBlogsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

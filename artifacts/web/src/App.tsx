@@ -9,6 +9,7 @@ import LoginPage from "./pages/login";
 import RegisterPage from "./pages/register";
 import ForgotPasswordPage from "./pages/forgot-password";
 import HomePage from "./pages/home";
+import BlogsPage from "./pages/blogs";
 import SavedPostsPage from "./pages/saved-posts";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -59,6 +60,9 @@ function Router() {
       {/* Protected routes */}
       <Route path="/">
         {() => <ProtectedRoute component={HomePage} />}
+      </Route>
+      <Route path="/blogs">
+        {() => <ProtectedRoute component={BlogsPage} />}
       </Route>
       <Route path="/saved-posts">
         {() => <ProtectedRoute component={SavedPostsPage} requireNonGuest={true} />}

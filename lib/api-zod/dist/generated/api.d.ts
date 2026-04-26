@@ -231,6 +231,7 @@ export declare const GetNewsResponse: zod.ZodObject<{
         isRelevantToDevTesting: zod.ZodBoolean;
         starred: zod.ZodBoolean;
         viewCount: zod.ZodNumber;
+        likeCount: zod.ZodNumber;
         tags: zod.ZodArray<zod.ZodString, "many">;
     }, "strip", zod.ZodTypeAny, {
         id: string;
@@ -242,6 +243,7 @@ export declare const GetNewsResponse: zod.ZodObject<{
         isRelevantToDevTesting: boolean;
         starred: boolean;
         viewCount: number;
+        likeCount: number;
         tags: string[];
     }, {
         id: string;
@@ -253,6 +255,7 @@ export declare const GetNewsResponse: zod.ZodObject<{
         isRelevantToDevTesting: boolean;
         starred: boolean;
         viewCount: number;
+        likeCount: number;
         tags: string[];
     }>, "many">;
     total: zod.ZodNumber;
@@ -271,6 +274,7 @@ export declare const GetNewsResponse: zod.ZodObject<{
         isRelevantToDevTesting: boolean;
         starred: boolean;
         viewCount: number;
+        likeCount: number;
         tags: string[];
     }[];
     total: number;
@@ -287,6 +291,98 @@ export declare const GetNewsResponse: zod.ZodObject<{
         isRelevantToDevTesting: boolean;
         starred: boolean;
         viewCount: number;
+        likeCount: number;
+        tags: string[];
+    }[];
+    total: number;
+}>;
+/**
+ * @summary Get latest QA blog articles
+ */
+export declare const getBlogsQueryPageDefault = 1;
+export declare const getBlogsQueryLimitDefault = 20;
+export declare const GetBlogsQueryParams: zod.ZodObject<{
+    page: zod.ZodDefault<zod.ZodNumber>;
+    limit: zod.ZodDefault<zod.ZodNumber>;
+}, "strip", zod.ZodTypeAny, {
+    page: number;
+    limit: number;
+}, {
+    page?: number | undefined;
+    limit?: number | undefined;
+}>;
+export declare const GetBlogsResponse: zod.ZodObject<{
+    articles: zod.ZodArray<zod.ZodObject<{
+        id: zod.ZodString;
+        title: zod.ZodString;
+        description: zod.ZodString;
+        url: zod.ZodString;
+        source: zod.ZodString;
+        publishedAt: zod.ZodString;
+        isRelevantToDevTesting: zod.ZodBoolean;
+        starred: zod.ZodBoolean;
+        viewCount: zod.ZodNumber;
+        likeCount: zod.ZodNumber;
+        tags: zod.ZodArray<zod.ZodString, "many">;
+    }, "strip", zod.ZodTypeAny, {
+        id: string;
+        title: string;
+        description: string;
+        url: string;
+        source: string;
+        publishedAt: string;
+        isRelevantToDevTesting: boolean;
+        starred: boolean;
+        viewCount: number;
+        likeCount: number;
+        tags: string[];
+    }, {
+        id: string;
+        title: string;
+        description: string;
+        url: string;
+        source: string;
+        publishedAt: string;
+        isRelevantToDevTesting: boolean;
+        starred: boolean;
+        viewCount: number;
+        likeCount: number;
+        tags: string[];
+    }>, "many">;
+    total: zod.ZodNumber;
+    page: zod.ZodNumber;
+    limit: zod.ZodNumber;
+}, "strip", zod.ZodTypeAny, {
+    page: number;
+    limit: number;
+    articles: {
+        id: string;
+        title: string;
+        description: string;
+        url: string;
+        source: string;
+        publishedAt: string;
+        isRelevantToDevTesting: boolean;
+        starred: boolean;
+        viewCount: number;
+        likeCount: number;
+        tags: string[];
+    }[];
+    total: number;
+}, {
+    page: number;
+    limit: number;
+    articles: {
+        id: string;
+        title: string;
+        description: string;
+        url: string;
+        source: string;
+        publishedAt: string;
+        isRelevantToDevTesting: boolean;
+        starred: boolean;
+        viewCount: number;
+        likeCount: number;
         tags: string[];
     }[];
     total: number;

@@ -105,3 +105,8 @@ export type GetNewsParams = {
   page?: number;
   limit?: number;
 };
+
+export type GetBlogsParams = {
+  page?: number;
+  limit?: number;
+};

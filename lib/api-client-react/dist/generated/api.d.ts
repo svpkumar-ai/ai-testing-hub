@@ -1,5 +1,5 @@
 import type { QueryKey, UseMutationOptions, UseMutationResult, UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
-import type { AuthResponse, ErrorResponse, GetNewsParams, HealthStatus, LoginRequest, MessageResponse, NewsResponse, RegisterRequest, ResetPasswordRequest, SavePostRequest, SavedPost, SavedPostsResponse } from "./api.schemas";
+import type { AuthResponse, ErrorResponse, GetBlogsParams, GetNewsParams, HealthStatus, LoginRequest, MessageResponse, NewsResponse, RegisterRequest, ResetPasswordRequest, SavePostRequest, SavedPost, SavedPostsResponse } from "./api.schemas";
 import { customFetch } from "../custom-fetch";
 import type { ErrorType, BodyType } from "../custom-fetch";
 type AwaitedInput<T> = PromiseLike<T> | T;
@@ -188,6 +188,29 @@ export type GetNewsQueryError = ErrorType<unknown>;
  */
 export declare function useGetNews<TData = Awaited<ReturnType<typeof getNews>>, TError = ErrorType<unknown>>(params?: GetNewsParams, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getNews>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+};
+/**
+ * @summary Get latest QA blog articles
+ */
+export declare const getGetBlogsUrl: (params?: GetBlogsParams) => string;
+export declare const getBlogs: (params?: GetBlogsParams, options?: RequestInit) => Promise<NewsResponse>;
+export declare const getGetBlogsQueryKey: (params?: GetBlogsParams) => readonly ["/api/blogs", ...GetBlogsParams[]];
+export declare const getGetBlogsQueryOptions: <TData = Awaited<ReturnType<typeof getBlogs>>, TError = ErrorType<unknown>>(params?: GetBlogsParams, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getBlogs>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+}) => UseQueryOptions<Awaited<ReturnType<typeof getBlogs>>, TError, TData> & {
+    queryKey: QueryKey;
+};
+export type GetBlogsQueryResult = NonNullable<Awaited<ReturnType<typeof getBlogs>>>;
+export type GetBlogsQueryError = ErrorType<unknown>;
+/**
+ * @summary Get latest QA blog articles
+ */
+export declare function useGetBlogs<TData = Awaited<ReturnType<typeof getBlogs>>, TError = ErrorType<unknown>>(params?: GetBlogsParams, options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getBlogs>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

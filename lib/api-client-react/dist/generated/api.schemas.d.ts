@@ -59,6 +59,7 @@ export interface NewsArticle {
     isRelevantToDevTesting: boolean;
     starred: boolean;
     viewCount: number;
+    likeCount: number;
     tags: string[];
 }
 export interface NewsResponse {
@@ -88,6 +89,10 @@ export interface SavedPostsResponse {
     posts: SavedPost[];
 }
 export type GetNewsParams = {
+    page?: number;
+    limit?: number;
+};
+export type GetBlogsParams = {
     page?: number;
     limit?: number;
 };

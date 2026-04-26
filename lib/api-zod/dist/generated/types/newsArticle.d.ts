@@ -15,6 +15,7 @@ export interface NewsArticle {
     isRelevantToDevTesting: boolean;
     starred: boolean;
     viewCount: number;
+    likeCount: number;
     tags: string[];
 }
 //# sourceMappingURL=newsArticle.d.ts.map
