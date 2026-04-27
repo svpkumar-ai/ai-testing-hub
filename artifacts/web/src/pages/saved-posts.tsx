@@ -2,7 +2,7 @@ import { useGetSavedPosts, useRemoveSavedPost } from "@workspace/api-client-reac
 import { Navbar } from "@/components/navbar";
 import { Card, Button } from "@/components/ui-elements";
 import { Loader2, Trash2, ExternalLink, BookmarkX } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, isValid } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -71,10 +71,10 @@ export default function SavedPostsPage() {
                           {post.articleSource}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {format(parseISO(post.articleDate), "MMM d, yyyy")}
+                          {(() => { const d = new Date(post.articleDate); return isValid(d) ? format(d, "MMM d, yyyy") : "Unknown"; })()}
                         </span>
                         <span className="text-xs text-muted-foreground/50 ml-auto">
-                          Saved {format(parseISO(post.savedAt), "MMM d, yyyy")}
+                          Saved {(() => { const d = new Date(post.savedAt); return isValid(d) ? format(d, "MMM d, yyyy") : "Unknown"; })()}
                         </span>
                       </div>
                       
